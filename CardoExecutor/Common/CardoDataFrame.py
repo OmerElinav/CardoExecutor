@@ -1,103 +1,73 @@
-from pyspark import RDD, StorageLevel
+from pyspark import RDD
 from pyspark.sql import DataFrame, SparkSession
-import copy
+import pandas as pd
 
-class CardoDataFrame(object):
-	def __init__(self, dataset=None, table_name='', dataframe=None, rdd=None, pandas=None, payload=None):
-		self.table_name = table_name
-		self._dataframe = None
-		self._rdd = None
-		self._pandas = None
-		self.payload = payload or {}
-		if dataset is None:
-			dataset = dataframe or rdd or pandas
-		if isinstance(dataset, DataFrame):
-			self._dataframe = dataset
-		elif isinstance(dataset, RDD):
-			self._rdd = dataset
-		elif self.__is_pandas_dataframe(dataset):
-			self._pandas = dataset
-		self._persisted = []
+_DF = '_df'
+_RDD = '_rdd'
 
-	def __is_pandas_dataframe(self, dataset):
-		# import is here because pandas installation isn't trivial and therefore we can't assume it is installed
-		# By importing here, we avoid the "missing package" error.
-		import pandas as pd
-		return isinstance(dataset, pd.DataFrame)
+def _wrap(func, wrapping_class):
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        return wrapping_class(result) if \
+            isinstance(result, wrapping_class.__bases__[0]) \
+            else result
 
-	@property
-	def payload_type(self):
-		# type: () -> str
-		if self._dataframe is not None:
-			return 'dataframe'
-		if self._rdd is not None:
-			return 'rdd'
-		if self._pandas is not None:
-			return 'pandas'
+    return wrapper
 
-	@property
-	def dataframe(self):
-		# type: () -> DataFrame
-		if self._dataframe is None:
-			if self._rdd is not None:
-				self._dataframe = self._rdd.toDF()
-			if self._pandas is not None:
-				self._dataframe = SparkSession.builder.getOrCreate().createDataFrame(self._pandas)
-			self._rdd = None
-			self._pandas = None
-		return self._dataframe
 
-	@property
-	def rdd(self):
-		# type: () -> RDD
-		if self._rdd is None:
-			self._rdd = self.dataframe.rdd
-			self._dataframe = None
-			self._pandas = None
-		return self._rdd
+def _wrap_bases(wrapping_class):
+    for base in wrapping_class.__bases__:
+        for key, value in vars(base).items():
+            if callable(value):
+                wrap = _wrap(getattr(base, key), wrapping_class)
+                setattr(wrapping_class, key, wrap)
+        return base
 
-	@property
-	def pandas(self):
-		# type: () -> pd.DataFrame
-		if self._pandas is None:
-			self._pandas = self.dataframe.toPandas()
-			self._dataframe = None
-			self._rdd = None
-		return self._pandas
 
-	def persist(self, storage_level=StorageLevel.MEMORY_AND_DISK):
-		persistable_object = getattr(self, self.payload_type)
-		if persistable_object is not None:
-			if hasattr(persistable_object, 'persist'):
-				persistable_object.persist(storageLevel=storage_level)
-				self._persisted.append(persistable_object)
-		return self
+class CardoWrapper(type):
+    def __init__(cls, name, bases, namespace):
+        super(CardoWrapper, cls).__init__(name, bases, namespace)
 
-	def unpersist(self, **kwargs):
-		blocking = kwargs.get("blocking")
-		for persistable in self._persisted:
-			if blocking is not None:
-				persistable.unpersist(blocking)
-			else:
-				persistable.unpersist()
 
-	@dataframe.setter
-	def dataframe(self, value):
-		self._dataframe = value
-		self._pandas = None
-		self._rdd = None
+def _get_attribute(cardo_dataframe, item, df_name=_DF):
+    df = object.__getattribute__(cardo_dataframe, df_name)
+    df_type = type(df)
+    if hasattr(df_type, item):
+        return df_type.__getattribute__(df, item)
+    return df_type.__getattribute__(cardo_dataframe, item)
 
-	@rdd.setter
-	def rdd(self, value):
-		self._rdd = value
-		self._dataframe = None
-		self._pandas = None
 
-	@pandas.setter
-	def pandas(self, value):
-		self._pandas = value
-		self._dataframe = None
-		self._rdd = None
+class CardoDataFrame(DataFrame, metaclass=CardoWrapper):
+    def __init__(self, df: DataFrame):
+        self._df = df
 
-	def deepcopy(self):
-		return CardoDataFrame(None, self.table_name, self._dataframe, self._rdd, copy.deepcopy(self._pandas))
+    def __getattribute__(self, item):
+        return _get_attribute(self, item)
+
+    def to_cardo_pandas(self):
+        return CardoPandasDataFrame(self._df.toPandas())
+
+    def to_cardo_rdd(self):
+        return CardoRDD(self._df.rdd)
+
+
+class CardoPandasDataFrame(pd.DataFrame, metaclass=CardoWrapper):
+    def __init__(self, df: pd.DataFrame):
+        self._df = df
+
+    def __getattribute__(self, item):
+        return _get_attribute(self, item)
+
+    def to_cardo_dataframe(self, session: SparkSession):
+        return CardoDataFrame(session.createDataFrame(self._df))
+
+
+class CardoRDD(RDD, metaclass=CardoWrapper):
+    def __init__(self, rdd: RDD):
+        self._rdd = rdd
+
+    def __getattribute__(self, item):
+        return _get_attribute(self, item, _RDD)
+
+    def to_cardo_dataframe(self, session: SparkSession):
+        return CardoDataFrame(session.createDataFrame(self._df))
