@@ -5,6 +5,7 @@ import pandas as pd
 _DF = '_df'
 _RDD = '_rdd'
 
+
 def _wrap(func, wrapping_class):
     def wrapper(*args, **kwargs):
         result = func(*args, **kwargs)
@@ -15,17 +16,17 @@ def _wrap(func, wrapping_class):
     return wrapper
 
 
-def _wrap_bases(wrapping_class):
-    for base in wrapping_class.__bases__:
-        for key, value in vars(base).items():
-            if callable(value):
-                wrap = _wrap(getattr(base, key), wrapping_class)
-                setattr(wrapping_class, key, wrap)
-        return base
+def _wrap_base(base, wrapping_class):
+    for key, value in vars(base).items():
+        if callable(value):
+            wrap = _wrap(getattr(base, key), wrapping_class)
+            setattr(wrapping_class, key, wrap)
 
 
 class CardoWrapper(type):
     def __init__(cls, name, bases, namespace):
+        for base in bases:
+            _wrap_base(base, cls)
         super(CardoWrapper, cls).__init__(name, bases, namespace)
 
 
