@@ -1,3 +1,6 @@
+_INNER = "_inner"
+
+
 class CardoWrapper(type):
     def __init__(cls, name, bases, namespace):
         for base in bases:
@@ -22,7 +25,7 @@ def _wrap_base(base, wrapping_class):
             setattr(wrapping_class, key, wrap)
 
 
-def get_wrapped_attribute(cardo_object, item: str, inner_object_name: str):
+def get_wrapped_attribute(cardo_object, item: str, inner_object_name: str = "_inner"):
     df = object.__getattribute__(cardo_object, inner_object_name)
     df_type = type(df)
     if hasattr(df_type, item):
