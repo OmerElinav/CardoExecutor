@@ -5,6 +5,11 @@ from CardoExecutor.Common.CardoWrapper import get_wrapped_attribute, _INNER
 
 
 class CardoDataFrame(DataFrame):
+    """
+    Wraps pyspark.sql.DataFrame. Gives name and a standardised casting between pandas, spark and RDD
+
+    custom __getattribute__ means that methods called on the outer CardoDataFrame object create a new inner variable.
+    """
     def __init__(self, df: DataFrame, name: str = ""):
         self._inner = df
         self.name = name
@@ -20,6 +25,12 @@ class CardoDataFrame(DataFrame):
 
 
 class CardoPandasDataFrame(pd.DataFrame):
+    """
+    Wraps pandas.DataFrame. Gives name and a standardised casting between pandas, spark and RDD
+
+    custom __getattribute__ means that methods called on the outer CardoPandasDataFrame object
+    create a new inner variable.
+    """
     def __init__(self, df: pd.DataFrame, name: str = ""):
         object.__setattr__(self, _INNER, df)
         object.__setattr__(self, "name", name)
@@ -32,6 +43,13 @@ class CardoPandasDataFrame(pd.DataFrame):
 
 
 class CardoRDD(RDD):
+    """
+    Wraps pyspark.RDD. Gives name and a standardised casting between pandas, spark and RDD
+
+    custom __getattribute__ means that methods called on the outer CardoRDD object create a new inner variable.
+
+    `name` replaces the default RDD.name() in order to interchangeable with CardoDataFrame and CardoPandasDataFrame
+    """
     def __init__(self, rdd: RDD, name: str = ""):
         self._inner = rdd
         self.name = name
