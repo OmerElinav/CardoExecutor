@@ -2,6 +2,7 @@ from pyspark import RDD
 from pyspark.sql import DataFrame, SparkSession
 import pandas as pd
 from CardoExecutor.Common.CardoWrapper import get_wrapped_attribute, _INNER
+from CardoExecutor.Common.CardoContext import CardoContext
 
 
 class CardoDataFrame(DataFrame):
@@ -38,8 +39,8 @@ class CardoPandasDataFrame(pd.DataFrame):
     def __getattribute__(self, item):
         return get_wrapped_attribute(self, item)
 
-    def to_cardo_dataframe(self, session: SparkSession):
-        return CardoDataFrame(session.createDataFrame(self._inner), name=self.name)
+    def to_cardo_dataframe(self):
+        return CardoDataFrame(CardoContext().createDataFrame(self._inner), name=self.name)
 
 
 class CardoRDD(RDD):
@@ -57,5 +58,5 @@ class CardoRDD(RDD):
     def __getattribute__(self, item):
         return get_wrapped_attribute(self, item)
 
-    def to_cardo_dataframe(self, session: SparkSession):
-        return CardoDataFrame(session.createDataFrame(self._inner), name=self.name)
+    def to_cardo_dataframe(self):
+        return CardoDataFrame(CardoContext().createDataFrame(self._inner), name=self.name)
